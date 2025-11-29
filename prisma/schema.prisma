@@ -1,0 +1,195 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum UserRole {
+  CLIENT
+  STYLIST
+  ADMIN
+}
+
+enum RequestStatus {
+  PENDING
+  ACCEPTED
+  DECLINED
+  EXPIRED
+}
+
+enum BookingStatus {
+  PENDING
+  CONFIRMED
+  COMPLETED
+  CANCELLED
+}
+
+enum BookingOrigin {
+  MARKETPLACE
+  DIRECT
+}
+
+model User {
+  id                 String    @id @default(cuid())
+  role               UserRole
+  name               String
+  email              String    @unique
+  phone              String?
+  passwordHash       String?
+  photoUrl           String?
+  createdAt          DateTime  @default(now())
+  stylistProfile     StylistProfile?
+  requests           Request[] @relation("ClientRequests")
+  messages           Message[]
+  bookingsAsClient   Booking[] @relation("BookingsAsClient")
+  bookingsAsStylist  Booking[] @relation("BookingsAsStylist")
+  emailVerified      DateTime?
+}
+
+model StylistProfile {
+  id             String             @id @default(cuid())
+  userId         String             @unique
+  bio            String
+  instagram      String?
+  neighborhoods  String[]
+  languages      String[]
+  verified       Boolean            @default(false)
+  hygieneBadge   Boolean            @default(false)
+  stylistSlug    String             @unique @default(uuid())
+  cancellationHr Int                @default(24)
+
+  user          User                @relation(fields: [userId], references: [id])
+  services      Service[]
+  availability  AvailabilityWindow[]
+  portfolio     PortfolioImage[]
+  payoutAccount PayoutAccount?
+  identityDocs  IdentityVerification?
+  bookings      Booking[]           @relation("BookingsAsStylist")
+}
+
+model Service {
+  id          String   @id @default(cuid())
+  stylistId   String
+  name        String
+  priceMin    Int
+  priceMax    Int
+  durationMin Int
+  category    String
+
+  stylist StylistProfile @relation(fields: [stylistId], references: [id])
+}
+
+model AvailabilityWindow {
+  id        String @id @default(cuid())
+  stylistId String
+  dayOfWeek Int
+  startTime String
+  endTime   String
+
+  stylist StylistProfile @relation(fields: [stylistId], references: [id])
+}
+
+model PortfolioImage {
+  id        String @id @default(cuid())
+  stylistId String
+  url       String
+  caption   String?
+
+  stylist StylistProfile @relation(fields: [stylistId], references: [id])
+}
+
+model Request {
+  id               String         @id @default(cuid())
+  clientId         String
+  stylistId        String
+  serviceId        String?
+  desiredDate      DateTime
+  desiredTimeRange String
+  note             String?
+  status           RequestStatus  @default(PENDING)
+  createdAt        DateTime       @default(now())
+
+  client   User            @relation("ClientRequests", fields: [clientId], references: [id])
+  stylist  StylistProfile  @relation(fields: [stylistId], references: [id])
+  service  Service?        @relation(fields: [serviceId], references: [id])
+  messages Message[]
+}
+
+model Message {
+  id         String   @id @default(cuid())
+  requestId  String
+  fromUserId String
+  body       String
+  createdAt  DateTime @default(now())
+
+  request Request @relation(fields: [requestId], references: [id])
+  from    User    @relation(fields: [fromUserId], references: [id])
+}
+
+model Booking {
+  id        String   @id @default(cuid())
+  clientId  String
+  stylistId String
+  serviceId String
+  startAt   DateTime
+  endAt     DateTime
+  price     Int
+  status    BookingStatus @default(PENDING)
+  origin    BookingOrigin @default(MARKETPLACE)
+  createdAt DateTime      @default(now())
+
+  client  User           @relation("BookingsAsClient", fields: [clientId], references: [id])
+  stylist StylistProfile @relation("BookingsAsStylist", fields: [stylistId], references: [id])
+  service Service        @relation(fields: [serviceId], references: [id])
+  payment Payment?
+  review  Review?
+}
+
+model PayoutAccount {
+  id           String   @id @default(cuid())
+  stylistId    String   @unique
+  provider     String
+  externalId   String
+  capabilities String[]
+
+  stylist StylistProfile @relation(fields: [stylistId], references: [id])
+}
+
+model Payment {
+  id             String   @id @default(cuid())
+  bookingId      String   @unique
+  provider       String
+  intentId       String
+  amount         Int
+  currency       String
+  feeToPlatform  Int
+  status         String
+  createdAt      DateTime @default(now())
+
+  booking Booking @relation(fields: [bookingId], references: [id])
+}
+
+model Review {
+  id        String   @id @default(cuid())
+  bookingId String   @unique
+  rating    Int
+  text      String
+  createdAt DateTime @default(now())
+  visible   Boolean  @default(true)
+  reply     String?
+
+  booking Booking @relation(fields: [bookingId], references: [id])
+}
+
+model IdentityVerification {
+  id        String @id @default(cuid())
+  stylistId String @unique
+  ineUrl    String
+  selfieUrl String
+  status    String @default("pending")
+
+  stylist StylistProfile @relation(fields: [stylistId], references: [id])
+}
